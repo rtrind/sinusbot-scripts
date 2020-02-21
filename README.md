@@ -11,8 +11,12 @@ to be off in the settings or the command !stop is used (which cancels
 it). 
 
 This script does not play well with the "Play when idle" feature, since 
-they both try to do kind of the same thing at the same time. This script
- actually was born because the original feature is kind of a mess, imo 
-(like when you use the stop command it gets a new song from the playlist
- and keeps going). If the feature ever becomes good, this script will 
-become obsolete.
+they both try to do kind of the same thing at the same time. This script will be obsolete when Sinusbot changes 2 behaviors on the original feature:
+
+1) The !stop command does not stop the queue. It will immediately start 
+another song. Since there is no pause command yet, there is no way to 
+temporarily stop the functionality;
+
+2) The !!stop command clears the queue permanently, so we need to go to 
+the GUI and add the desired songs to the feature again, which for me 
+goes against the spirit of the functionality. 
