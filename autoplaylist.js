@@ -1,6 +1,6 @@
 registerPlugin({
     name: 'Autoplaylist',
-    version: '1.0',
+    version: '1.1',
     description: 'Plays random music from the catalog if nothing is playing/queued. For this first version, you need all desired songs in a list name Autoplaylist.',
     author: 'Ricardo Trindade <hattie.walker82@animalzero.com>',
     vars: [{
@@ -8,12 +8,17 @@ registerPlugin({
         title: "Autoplaylist initial mode",
         type: "select",
         options: ["ON", "OFF"],
-        default: 1
-    }],    
-    backends: ["discord"]
-}, function(_, { INITIAL_MODE }, meta) {
-    const REACTION_SUCCESS = '✅';
-
+        default: 1,
+    },
+    {
+        name: "AUTO_VOLUME_LEVEL",
+        title: "The volume will be 100 for all autoplay songs and the number you configure here for all others (-1 to disable)",
+        type: "number",
+        default: -1,
+    },
+    ],    
+    backends: ["discord"],
+}, function(_, { INITIAL_MODE, AUTO_VOLUME_LEVEL }, meta) {
     const audio = require('audio');
     const backend = require('backend');
     const command = require('command');
@@ -21,22 +26,27 @@ registerPlugin({
     const event = require('event');
     const helpers = require('helpers');
     const media = require('media');
+    
+    const prefix = engine.getCommandPrefix();
 
+    const REACTION_SUCCESS = '✅';
     const ON = 0;
     const OFF = 1;
 
-    let prefix = engine.getCommandPrefix();
-    let engaged;
+    let engaged;                               // Autoplay is ON/OFF
+    let auto_volume_level;                     // Volume level (or OFF)
+    let songJustStartedIsFromAutoplay = false; // Control variable to not lower volume for autoplay songs
 
     event.on('load', () => {
         engaged = (INITIAL_MODE == ON);
+        auto_volume_level = AUTO_VOLUME_LEVEL;
         if (engaged) {
             engine.log('[DEBUG] Autoplaylist mode ON.');
             checkIfEligibleForAutoplayMode();
         }
     });
 
-    // Check if we are alone (alonemode script does not cover situations where the admin)
+    // Check if we are alone in the channel
     function botIsAlone() {
         let currentChannel = backend.getCurrentChannel();
         let clients = currentChannel ? currentChannel.getClientCount() : 0;
@@ -45,8 +55,10 @@ registerPlugin({
 
     // Nothing is playing, select something and play
     function autoplay() {
-        if (!engaged) return;
-        engine.log('[DEBUG] Checking for empty queue/playlist...');
+        if (!engaged) {
+            engine.log('[DEBUG] Autoplaylist mode is disengaged. Exiting...');
+            return;    
+        }
 
         // Find Autoplaylist
         let playlist = media.getPlaylists().find(playlist => {
@@ -57,34 +69,62 @@ registerPlugin({
             return;
         }
 
-        engine.log('[DEBUG] Autoplay engaged. Playing something from the catalog...');
         // Select a random song and play it
+        engine.log('[DEBUG] Autoplay engaged. Playing something from the catalog...');
         let tracks = playlist.getTracks();
         let selectedTrack = tracks[helpers.getRandom(tracks.length)];
+        if (auto_volume_level != -1) {
+            engine.log('[DEBUG] Setting volume to 100...');
+            audio.setVolume(100);  // All the musics are normalized, set volume at max.
+        }
         selectedTrack.play();
+        songJustStartedIsFromAutoplay = true;
+
+        setTimeout(() => {
+            songJustStartedIsFromAutoplay = false;
+        }, 5000);
     }
 
     function checkIfEligibleForAutoplayMode() {
-        if (botIsAlone()) return;
-
-        if (media.getQueue().length > 0) return;
-        if (media.getActivePlaylist() && audio.isShuffle()) return;  // The playlist never ends if shuffle is engaged
+        if (botIsAlone()) {
+            engine.log('[DEBUG] Bot is alone. Exiting...');
+            return;
+        }
+        if (media.getQueue().length > 0) {
+            engine.log('[DEBUG] The queue is not empty. Exiting...');
+            return;
+        }
+        if (media.getActivePlaylist() && audio.isShuffle()) {
+            engine.log('[DEBUG] Playlist in shuffle mode is engaged. Exiting...');
+            return;
+        }
             
         // Workaround for end of unshuffled playlist or "invisible queue"
-        setTimeout(() => { 
+        setTimeout(() => {
+            engine.log('[DEBUG] Checking for autoplay availability...');
             if( !audio.isPlaying() ) autoplay(); 
         }, 5000);
     }
 
+    // Track the song starting, so we can use the autovolume function, if activated
+    event.on('track', function(track) {
+        if (!songJustStartedIsFromAutoplay) {
+            if (auto_volume_level != -1) {
+                engine.log('[DEBUG] Setting volume to ' + auto_volume_level + '...');
+                audio.setVolume(auto_volume_level);  // Use the volume from the config
+            }
+        }
+    });
+
     // Track the song ending (naturally or by skipping/stopping the bot)
     event.on('trackEnd', function(track, callback) {
-        engine.log('[DEBUG] Music ' + track.title() + ' ended...');
+        engine.log('[DEBUG] Music ' + track.title() + ' stopped/ended.');
         checkIfEligibleForAutoplayMode();
     });
 
-    // Workaround for alone mode not yet engaged (first time after loading bot)
+    // We could be alone (stop) or the first human entered (start), check
     event.on('clientMove', () => {
-        engine.log('[DEBUG] Client moved...');
+        engine.log('[DEBUG] Client moved.');
         checkIfEligibleForAutoplayMode();
     });
 
@@ -94,7 +134,7 @@ registerPlugin({
         if (possibleCommand == prefix + 'stop' || 
             possibleCommand == prefix + prefix + 'stop') {
             
-            msg.channel.chat('Disengaging autoplay mode. Use the command ' + prefix + ' to start it againg later.');
+            msg.channel.chat('Disengaging autoplay mod. Use the command ' + prefix + 'autoplay to start it againg later.');
             engaged = false;
         }
     });
