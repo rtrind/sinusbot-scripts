@@ -1,27 +1,28 @@
 # sinusbot-scripts
 ## Autoplaylist.js
+This script plays random music from the catalog if nothing is playing/queued.
+
+### Installation
+Just copy the autoplaylist.js file to your sinusbot installation "scripts" folder and restart the program.
+
+### Usage
+1) Install the script and reboot the program;
+2) Create a playlist named Autoplaylist and add songs to it. Only the 
+songs in this playlist are going to be played by this script;
+3) Activate it on the Scripts GUI page;
+4) Configure your preference for the starting mode when the instance starts (ON or OFF).
+
+### New Commands
+!autoplay - Starts the autoplay mode, in case it's off for any reason (initial configuration or disable by other commands);
+
+### Modified Original Commands
+!stop - Besides stopping the current song, it also disables the autoplay mode;
+!!stop - Besides stopping the current song and clearing the idle queue, it also disables the autoplay mode.
+
+### Attention Points
+Please do not use this script together with the native "Play when idle" 
+feature. They are incompatible and things will break if you try it.
+
 This is my first attempt at a script at my free time, so don't expect it
 to be super stable. Tested only on SinusBot v1.0.0-beta.10-202ee4d with
 the Discord backend.
-
-For now, the playlist used for the bot needs to be named Autoplaylist, otherwise the script won't work.
-
-It adds a command !autoplay to start the mode, in case it's configured 
-to be off in the settings or the command !stop is used (which cancels 
-it). 
-
-If you want, you can use the auto volume settings, so you can find a better
-balance for the volume of the songs from the catalog compared to the songs
-downloaded from ytdl. Use -1 to disable those functions.
-
-This script does not play well with the "Play when idle" feature, since 
-they both try to do kind of the same thing at the same time. This script 
-will be obsolete when Sinusbot changes 2 behaviors on the original feature:
-
-1) The !stop command does not stop the queue. It will immediately start 
-another song. Since there is no pause command yet, there is no way to 
-temporarily stop the functionality;
-
-2) The !!stop command clears the queue permanently, so we need to go to 
-the GUI and add the desired songs to the feature again, which for me 
-goes against the spirit of the functionality. 
