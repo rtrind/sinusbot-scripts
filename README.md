@@ -10,8 +10,13 @@ It adds a command !autoplay to start the mode, in case it's configured
 to be off in the settings or the command !stop is used (which cancels 
 it). 
 
+If you want, you can use the auto volume settings, so you can find a better
+balance for the volume of the songs from the catalog compared to the songs
+downloaded from ytdl. Use -1 to disable those functions.
+
 This script does not play well with the "Play when idle" feature, since 
-they both try to do kind of the same thing at the same time. This script will be obsolete when Sinusbot changes 2 behaviors on the original feature:
+they both try to do kind of the same thing at the same time. This script 
+will be obsolete when Sinusbot changes 2 behaviors on the original feature:
 
 1) The !stop command does not stop the queue. It will immediately start 
 another song. Since there is no pause command yet, there is no way to 
