@@ -1,6 +1,32 @@
+/**
+ * @author margaret.iinteranfac96@animalzero.com
+ * @license MIT
+ * 
+ * MIT License
+ * 
+ * Copyright (c) 2019-2020 margaret.iinteranfac96@animalzero.com
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 registerPlugin({
     name: 'Autoplaylist',
-    version: '1.1',
+    version: '1.2.1',
     description: 'Plays random music from the catalog if nothing is playing/queued. For this first version, you need all desired songs in a list name Autoplaylist.',
     author: 'Ricardo Trindade <hattie.walker82@animalzero.com>',
     vars: [{
@@ -11,14 +37,20 @@ registerPlugin({
         default: 1,
     },
     {
-        name: "AUTO_VOLUME_LEVEL",
-        title: "The volume will be 100 for all autoplay songs and the number you configure here for all others (-1 to disable)",
+        name: "YTDL_VOLUME_LEVEL",
+        title: "Sets the volume automatically for ytdl songs. Use both volume controls or none at all. (-1 to disable)",
+        type: "number",
+        default: -1,
+    },
+    {
+        name: "JUKE_VOLUME_LEVEL",
+        title: "Sets the volume automatically for autoplaylist songs. Use both volume controls or none at all. (-1 to disable)",
         type: "number",
         default: -1,
     },
     ],    
     backends: ["discord"],
-}, function(_, { INITIAL_MODE, AUTO_VOLUME_LEVEL }, meta) {
+}, function(_, { INITIAL_MODE, YTDL_VOLUME_LEVEL, JUKE_VOLUME_LEVEL }, meta) {
     const audio = require('audio');
     const backend = require('backend');
     const command = require('command');
@@ -32,14 +64,16 @@ registerPlugin({
     const REACTION_SUCCESS = '✅';
     const ON = 0;
     const OFF = 1;
+    const AUTOPLAY_TIMEOUT = 5000;    
 
     let engaged;                               // Autoplay is ON/OFF
-    let auto_volume_level;                     // Volume level (or OFF)
-    let songJustStartedIsFromAutoplay = false; // Control variable to not lower volume for autoplay songs
+    let ytdl_volume_level;                     // Auto volume for external songs                     
+    let juke_volume_level;                     // Auto volume for internal songs
 
     event.on('load', () => {
         engaged = (INITIAL_MODE == ON);
-        auto_volume_level = AUTO_VOLUME_LEVEL;
+        ytdl_volume_level = YTDL_VOLUME_LEVEL;
+        juke_volume_level = JUKE_VOLUME_LEVEL;
         if (engaged) {
             engine.log('[DEBUG] Autoplaylist mode ON.');
             checkIfEligibleForAutoplayMode();
@@ -53,8 +87,21 @@ registerPlugin({
         return (clients <= 1) 
     }
 
+    /**
+     * Returns a formatted string from a Track (or PlaylistTrack).
+     *
+     * @param {Track} track
+     * @returns {string} formatted string
+     */
+    function formatTrack(track) {
+        let title = track.tempTitle() || track.title();
+        let artist = track.tempArtist() || track.artist();
+        return artist ? `${artist} - ${title}` : title;
+    }
+
     // Nothing is playing, select something and play
     function autoplay() {
+        engine.log('[DEBUG] Checking for autoplay oportunity...');
         if (!engaged) {
             engine.log('[DEBUG] Autoplaylist mode is disengaged. Exiting...');
             return;    
@@ -72,59 +119,65 @@ registerPlugin({
         // Select a random song and play it
         engine.log('[DEBUG] Autoplay engaged. Playing something from the catalog...');
         let tracks = playlist.getTracks();
-        let selectedTrack = tracks[helpers.getRandom(tracks.length)];
-        if (auto_volume_level != -1) {
-            engine.log('[DEBUG] Setting volume to 100...');
-            audio.setVolume(100);  // All the musics are normalized, set volume at max.
+        if (tracks.length == 0) {
+            engine.log('[DEBUG] No songs in the Autoplaylist, disengaging jukebox mode.');
+            return;
         }
+        let selectedTrack = tracks[helpers.getRandom(tracks.length)];
+        engine.log('[DEBUG] Song selected!')
         selectedTrack.play();
-        songJustStartedIsFromAutoplay = true;
-
-        setTimeout(() => {
-            songJustStartedIsFromAutoplay = false;
-        }, 5000);
     }
 
     function checkIfEligibleForAutoplayMode() {
         if (botIsAlone()) {
-            engine.log('[DEBUG] Bot is alone. Exiting...');
+            engine.log('[DEBUG] Bot is alone, exiting...');
             return;
         }
         if (media.getQueue().length > 0) {
-            engine.log('[DEBUG] The queue is not empty. Exiting...');
+            engine.log('[DEBUG] The queue is not empty, exiting...');
             return;
         }
         if (media.getActivePlaylist() && audio.isShuffle()) {
-            engine.log('[DEBUG] Playlist in shuffle mode is engaged. Exiting...');
+            engine.log('[DEBUG] Playlist in shuffle mode is engaged, exiting...');
             return;
         }
             
         // Workaround for end of unshuffled playlist or "invisible queue"
         setTimeout(() => {
-            engine.log('[DEBUG] Checking for autoplay availability...');
-            if( !audio.isPlaying() ) autoplay(); 
-        }, 5000);
+            if( audio.isPlaying() ) {
+                engine.log('[DEBUG] Song is playing, exiting...');
+            } else {
+                autoplay();
+            }
+        }, AUTOPLAY_TIMEOUT);
     }
 
     // Track the song starting, so we can use the autovolume function, if activated
     event.on('track', function(track) {
-        if (!songJustStartedIsFromAutoplay) {
-            if (auto_volume_level != -1) {
-                engine.log('[DEBUG] Setting volume to ' + auto_volume_level + '...');
-                audio.setVolume(auto_volume_level);  // Use the volume from the config
-            }
+        engine.log(`[DEBUG] Track started (${track.url()}) '${formatTrack(track)}'`)
+        if (track.url()) {
+            // Jukebox song
+            volume_level = juke_volume_level;
+        } else {
+            // Other source
+            volume_level = ytdl_volume_level;
+        }
+
+        if (volume_level != -1) {
+            engine.log(`[DEBUG] Setting volume to ${volume_level}...`);
+            audio.setVolume(volume_level);
         }
     });
 
     // Track the song ending (naturally or by skipping/stopping the bot)
     event.on('trackEnd', function(track, callback) {
-        engine.log('[DEBUG] Music ' + track.title() + ' stopped/ended.');
+        engine.log(`[DEBUG] Music '${formatTrack(track)}' stopped/ended.`);
         checkIfEligibleForAutoplayMode();
     });
 
     // We could be alone (stop) or the first human entered (start), check
     event.on('clientMove', () => {
-        engine.log('[DEBUG] Client moved.');
+        engine.log('[DEBUG] Client moved...');
         checkIfEligibleForAutoplayMode();
     });
 
@@ -141,6 +194,7 @@ registerPlugin({
 
     // Allows a way to engage autoplay again after its stopped somehow
     command.createCommand('autoplay')
+    .alias('ap')
     .help('Start playing back the playlist Autoplaylist')
     .manual('starts playing back the playlist Autoplaylist.')
     .exec((client, args, reply, ev) => {
