@@ -26,7 +26,7 @@
  */
 registerPlugin({
     name: 'Autoplaylist',
-    version: '1.2.1',
+    version: '1.2.2',
     description: 'Plays random music from the catalog if nothing is playing/queued. For this first version, you need all desired songs in a list name Autoplaylist.',
     author: 'Ricardo Trindade <hattie.walker82@animalzero.com>',
     vars: [{
