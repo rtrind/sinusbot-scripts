@@ -66,6 +66,9 @@ registerPlugin({
     const OFF = 1;
     const AUTOPLAY_TIMEOUT = 5000;    
 
+    /********* privileges *********/
+    const PLAYBACK          = 1 << 12;
+
     let engaged;                               // Autoplay is ON/OFF
     let ytdl_volume_level;                     // Auto volume for external songs                     
     let juke_volume_level;                     // Auto volume for internal songs
@@ -97,6 +100,39 @@ registerPlugin({
         let title = track.tempTitle() || track.title();
         let artist = track.tempArtist() || track.artist();
         return artist ? `${artist} - ${title}` : title;
+    }
+
+    /**
+     * Returns alls users that match the clients UID and ServerGroups.
+     *
+     * @param {Client} client
+     * @returns {User[]} Users that match the clients UID and ServerGroups.
+     */
+    function getUsersByClient(client) {
+        return engine.getUsers().filter(user =>
+            // does the UID match?
+            client.uid() == user.uid() ||
+            // does a group ID match?
+            client.getServerGroups().map(group => group.id()).includes(user.groupId()) ||
+            // group ID '-1' matches everyone
+            user.groupId() == '-1'
+        );
+    }
+
+    /**
+     * Returns a function that checks if a given user has all of the required privileges.
+     * @param {...number} privileges If at least one privilege matches the returned function will return true.
+     */
+    function requirePrivileges(...privileges) {
+        return (/** @type {Client} */ client) => {
+            // check if at least one user has the required privileges
+            return getUsersByClient(client).some(user => {
+                // check if at least one privilege is found
+                return privileges.some(priv => {
+                    return ((user.privileges()|user.instancePrivileges()) & priv) === priv;
+                });
+            });
+        };
     }
 
     // Nothing is playing, select something and play
@@ -187,7 +223,7 @@ registerPlugin({
         if (possibleCommand == prefix + 'stop' || 
             possibleCommand == prefix + prefix + 'stop') {
             
-            msg.channel.chat('Disengaging autoplay mod. Use the command ' + prefix + 'autoplay to start it againg later.');
+            msg.channel.chat('Disengaging autoplay mod. Use the command ' + prefix + 'autoplay to start it again later.');
             engaged = false;
         }
     });
@@ -197,6 +233,7 @@ registerPlugin({
     .alias('ap')
     .help('Start playing back the playlist Autoplaylist')
     .manual('starts playing back the playlist Autoplaylist.')
+    .checkPermission(requirePrivileges(PLAYBACK))
     .exec((client, args, reply, ev) => {
         engaged = true;
 
